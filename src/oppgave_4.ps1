@@ -15,7 +15,7 @@ $kortstokkJson = $webRequest.Content | ConvertFrom-Json
 $kortstokk = @()
 foreach ($kort in $kortstokkJson)
 {
-    $kortstokk +=  ($kort.suit[0] + $kort.value[0] + ",")
+    $kortstokk +=  ($kort.suit[0] + $kort.value + ",")
 }
 
 Write-Host "Kortstokk:  $kortstokk"
