@@ -48,19 +48,15 @@ function KortstokkPrint {
 
 
 
-Write-Host "Kortstokk:  $(kortstokkPrint($kortstokkJson))"
-Write-Host "Poengsum:   $sum"
+#Write-Host "Kortstokk:  $(kortstokkPrint($kortstokkJson))"
+#Write-Host "Poengsum:   $sum"
+
 
 # 2 players and each take first cards on the deck/kortstokkJson
 # Print players hand and the rest of deck
 $Ahmad = $kortstokkJson[0..1]
 $Magnus = $kortstokkJson[2..3]
 $kortstokkJson = $kortstokkJson[4..$kortstokkJson.Length]
-
-Write-Host "Ahmad:  $(KortstokkPrint($Ahmad))"
-Write-Host "Magnus:  $(KortstokkPrint($Magnus))"
-Write-Host "Kortstokk:  $(KortstokkPrint($KortstokkJson))"
-
 
 
 function kortVerdi {
@@ -93,7 +89,7 @@ function sumPoengKortstokk{
          $sum +=  kortVerdi($kort)
     }
 
-    return $sum
+    return [int]$sum
 }
 
 function resultsPrint {
@@ -112,6 +108,8 @@ function resultsPrint {
 
 $blackjack = 21
 
+
+
 # Draw a card if sum of existing cards are less than 17
 while ((sumPoengKortstokk -kortstokk $Ahmad) -lt 17) {
     
@@ -120,6 +118,13 @@ while ((sumPoengKortstokk -kortstokk $Ahmad) -lt 17) {
     #Write-Host "My hand is $(KortstokkPrint($Ahmad))"
     #Write-Host "kortstokkJs is $(KortstokkPrint($kortstokkJson))"
 }
+
+Write-Host "Kortstokk:  $(kortstokkPrint($Ahmad)) $(KortstokkPrint($Magnus))"
+$kortihands = $Ahmad + $Magnus
+Write-Host "Poengsum:   $(sumPoengKortstokk $kortihands)"
+
+#Write-Host "Ahmad:  $(KortstokkPrint($Ahmad))"
+#Write-Host "Magnus:  $(KortstokkPrint($Magnus))"
 
 if ((sumPoengKortstokk -kortstokk $Ahmad) -gt $blackjack) {
     resultsPrint -vinner "Magnus" -kortStokkMagnus $Magnus -kortStokkMeg $Ahmad
