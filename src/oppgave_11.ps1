@@ -1,176 +1,177 @@
-function BJGame {
-    
-    [CmdletBinding()]
+using namespace System.Net
+
+# Input bindings are passed in via param block.
+param($Request, $TriggerMetadata)
+
+# Write to the Azure Functions log stream.
+Write-Host "PowerShell HTTP trigger function processed a request."
+
+# Interact with query parameters or the body of the request.
+$urlKortstokk = switch ($Request.Query.urlKortstokk) {
+  {-not $_} {$Request.Body.urlKortstokk}
+  Default {$_}
+}
+
+function playBlackjack {
+    [OutputType([hashtable])]
     param (
-        [Parameter()]
         [string]
-        $UrlKortstokk = "http://nav-deckofcards.herokuapp.com/shuffle"
+        $encodedUrlKortstokk = 'http%3A%2F%2Fnav-deckofcards.herokuapp.com%2Fshuffle'
     )
 
-    $ErrorActionPreference = 'Stop'
+    # Feilhåndtering - stopp programmet hvis det dukker opp noen feil
+    # Se https://docs.microsoft.com/en-us/dotnet/api/system.management.automation.actionpreference?view=powershellsdk-7.0.0
+    $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
 
-    $webRequest = Invoke-WebRequest -Uri $UrlKortstokk
+    $webRequest = Invoke-WebRequest -Uri ([System.Web.HttpUtility]::UrlDecode($encodedUrlKortstokk))
 
+    $kortstokkJson = $webRequest.Content
 
-    $kortstokkJson = $webRequest.Content | ConvertFrom-Json
+    $kortstokk = ConvertFrom-Json -InputObject $kortstokkJson
 
-    #Sum up the value of the cards
-    #J, Q and K are 10 and Ace is 11
-    $sum = 0
-    foreach ($kort in $kortstokkJson)
-    {
-        $sum +=  switch ($kort.value) {
-            "J" { 10 }
-            "Q" { 10 }
-            "K" { 10 }
-            "A" { 11 }
-            Default {$kort.value}
-        }
-        
-    }
-
-
-    # Print short format of a card and its value
-    # input is Json formatted data
-    # Output is array of short formatted key-value pair 
-    function KortstokkPrint {
+    function kortstokkTilStreng {
+        [OutputType([string])]
         param (
-            [Parameter()]
-            [Object[]]
-            $kortstokkJs
+            [object[]]
+            $kortstokk
         )
-        $kortstokk = @()
-        foreach ($kort in $kortstokkJs)
-        {
-            $kortstokk +=  ($kort.suit[0] + $kort.value + ",")
+        $streng = ''
+        foreach ($kort in $kortstokk) {
+            $streng = $streng + "$($kort.suit[0])" + $kort.value + ","
         }
-
-        return $kortstokk
+        return $streng
     }
 
-
-
-    Write-Host "Kortstokk:  $(kortstokkPrint($kortstokkJson))"
-    Write-Host "Poengsum:   $sum"
-
-
-    # 2 players and each take first cards on the deck/kortstokkJson
-    # Print players hand and the rest of deck
-    $Ahmad = $kortstokkJson[0..1]
-    $Magnus = $kortstokkJson[2..3]
-    $kortstokkJson = $kortstokkJson[4..$kortstokkJson.Length]
-
-
-    function kortVerdi {
+    function sumPoengKortstokk {
+        [OutputType([int])]
         param (
-            [Parameter()]
-            [Object[]]
-            $kort
-        )
-        $value = 0
-        $value = switch ($kort.value) {
-                        "J" { 10  }
-                        "Q" { 10  }
-                        "K" { 10  }
-                        "A" { 11  }
-                        Default {$kort.value}
-        }
-        return $value
-    }
-    #sum the cards value and announce the winner
-    function sumPoengKortstokk{
-        param (
-            [Parameter()]
-            [Object[]]
-            $kortstokkJs
+            [object[]]
+            $kortstokk
         )
 
-        $sum = 0
-        foreach ($kort in $kortstokkJs)
-        {
-            $sum +=  kortVerdi($kort)
-        }
+        $poengKortstokk = 0
 
-        return [int]$sum
+        foreach ($kort in $kortstokk) {
+            $poengKortstokk += switch ($kort.value) {
+                { $_ -cin @('J', 'Q', 'K') } { 10 }
+                'A' { 11 }
+                default { $kort.value }
+            }
+        }
+        return $poengKortstokk
     }
 
-    function resultsPrint {
+    function resultatTilHashtable {
         param (
             [string]
-            $vinner,        
+            $vinner,
             [object[]]
             $kortStokkMagnus,
             [object[]]
-            $kortStokkAhmad        
-            )
-            Write-Output "Vinner: $vinner"
-            Write-Output "magnus | $(sumPoengKortstokk -kortstokk $Magnus) | $(KortstokkPrint -kortstokkJs $Magnus)"    
-            Write-Output "Ahmad    | $(sumPoengKortstokk -kortstokk $Ahmad) | $(KortstokkPrint -kortstokkJs $Ahmad)"
+            $kortStokkMeg
+        )
+        [ordered]@{
+            vinner = $vinner
+            magnus = [ordered]@{
+                poeng = $(sumPoengKortstokk -kortstokk $kortStokkMagnus)
+                kort  = $(kortStokkTilStreng -kortstokk $kortStokkMagnus)
+            }
+            meg    = [ordered]@{
+                poeng = $(sumPoengKortstokk -kortstokk $kortStokkMeg)
+                kort  = $(kortStokkTilStreng -kortstokk $kortStokkMeg)
+            }
+        }
     }
 
+    # Write-Output "Kortstokk: $(kortStokkTilStreng -kortstokk $kortstokk)"
+    # Write-Output "Poengsum: $(sumPoengKortstokk -kortstokk $kortstokk)"
+    # Write-Output ""
+
+    ### Regler (1)
+    ### Du tar de to første kortene, Magnus tar de to neste
+
+    $meg = $kortstokk[0..1]
+    $kortstokk = $kortstokk[2..$kortstokk.Count]
+
+    $magnus = $kortstokk[0..1]
+    $kortstokk = $kortstokk[2..$kortstokk.Count]
+
+    ### Regn ut den samlede poengsummen til hver spiller
+    ### Regn ut om en av spillerene har 21 poeng - Blackjack - med deres initielle kort, og dermed vinner runden
+
+    # bruker 'blackjack' som et begrep - er 21
     $blackjack = 21
 
-
-
-    # Draw a card if sum of existing cards are less than 17
-    while ((sumPoengKortstokk -kortstokk $Ahmad) -lt 17) {
-        
-        $Ahmad += $kortstokkJson[0]
-        $kortstokkJson = $kortstokkJson[1..$kortstokkJson.length]
-        #Write-Host "My hand is $(KortstokkPrint($Ahmad))"
-        #Write-Host "kortstokkJs is $(KortstokkPrint($kortstokkJson))"
+    if (((sumPoengKortstokk -kortstokk $meg) -eq $blackjack) -and ((sumPoengKortstokk -kortstokk $magnus) -eq $blackjack)) {
+        return resultatTilHashtable -vinner "Draw" -kortStokkMagnus $magnus -kortStokkMeg $meg
+        #exit
     }
-
-
-
-
-    #Write-Host "Kortstokk:  $(kortstokkPrint($Ahmad)) $(KortstokkPrint($Magnus))"
-    #$kortihands = $Ahmad + $Magnus
-    #Write-Host "Poengsum:   $(sumPoengKortstokk $kortihands)"
-
-    #Write-Host "Ahmad:  $(KortstokkPrint($Ahmad))"
-    #Write-Host "Magnus:  $(KortstokkPrint($Magnus))"
-
-    if ((sumPoengKortstokk -kortstokk $Ahmad) -gt $blackjack) {
-        resultsPrint -vinner "Magnus" -kortStokkMagnus $Magnus -kortStokkMeg $Ahmad
-        Write-Host "Kortstokk:  $(kortstokkPrint($kortstokkJson))"
+    elseif ((sumPoengKortstokk -kortstokk $meg) -eq $blackjack) {
+        resultatTilHashtable -vinner "meg" -kortStokkMagnus $magnus -kortStokkMeg $meg
         exit
     }
+    elseif ((sumPoengKortstokk -kortstokk $magnus) -eq $blackjack) {
+        return resultatTilHashtable -vinner "magnus" -kortStokkMagnus $magnus -kortStokkMeg $meg
+        #exit
+    }
 
-    while ((sumPoengKortstokk -kortstokk $Magnus) -le (sumPoengKortstokk -kortstokk $Ahmad)) {
-        $Magnus += $kortstokkJson[0]
-        $kortstokkJson = $kortstokkJson[1..$kortstokkJson.length]
+    ### Regler(2)
+
+    ### Hvis ingen har 21 poeng, skal spillerne trekke kort fra toppen av kortstokken
+    ### Du skal stoppe å trekke kort når poengsummen blir 17 eller høyere
+
+    while ((sumPoengKortstokk -kortstokk $meg) -lt 17) {
+        $meg += $kortstokk[0]
+        $kortstokk = $kortstokk[1..$kortstokk.Count]
+    }
+
+    ### Du taper spillet hvis poengsummen er høyere enn 21
+
+    if ((sumPoengKortstokk -kortstokk $meg) -gt $blackjack) {
+        return resultatTilHashtable -vinner "magnus" -kortStokkMagnus $magnus -kortStokkMeg $meg
+        #exit
+    }
+
+    ### Når du har stoppet å trekke kort, begynner Magnus å trekke kort
+    ### Magnus slutter å trekke kort når poengsummen hans er høyere enn din poengsum
+
+    while ((sumPoengKortstokk -kortstokk $magnus) -le (sumPoengKortstokk -kortstokk $meg)) {
+        $magnus += $kortstokk[0]
+        $kortstokk = $kortstokk[1..$kortstokk.Count]
     }
 
     ### Magnus taper spillet dersom poengsummen er høyere enn 21
-    if ((sumPoengKortstokk -kortstokk $Magnus) -gt 21) {
-        resultsPrint -vinner "Ahmad" -kortStokkMagnus $magnus -kortStokkMeg $Ahmad
-        Write-Host "Kortstokk:  $(kortstokkPrint($kortstokkJson))"
-        exit
+    if ((sumPoengKortstokk -kortstokk $magnus) -gt $blackjack) {
+        return resultatTilHashtable -vinner "meg" -kortStokkMagnus $magnus -kortStokkMeg $meg
+        #exit
     }
 
-    if ((sumPoengKortstokk -kortstokk $Magnus) -eq $blackjack) {
-        resultsPrint -vinner "Magnus" -kortStokkMagnus $Magnus -kortStokkMeg $Ahmad
-        Write-Host "Kortstokk:  $(kortstokkPrint($kortstokkJson))"
-        exit
-    }
-    elseif ((sumPoengKortstokk -kortstokk $Ahmad) -eq $blackjack) {
-        resultsPrint -vinner "Ahmad" -kortStokkMagnus $Magnus -kortStokkMeg $Ahmad
-        Write-Host "Kortstokk:  $(kortstokkPrint($kortstokkJson))"
-        exit
-    }
-    elseif (((sumPoengKortstokk -kortstokk $Magnus) -eq $blackjack) -and
-            ((sumPoengKortstokk -kortstokk $Ahmad) -eq $blackjack)) {
-        resultsPrint -vinner "Draw" -kortStokkMagnus $Magnus -kortStokkMeg $Ahmad
-        Write-Host "Kortstokk:  $(kortstokkPrint($kortstokkJson))"
-        exit
-    }elseif (((sumPoengKortstokk -kortstokk $Magnus) -lt $blackjack) -and
-            ((sumPoengKortstokk -kortstokk $Ahmad) -lt $blackjack)) {
-        resultsPrint -vinner "undecided" -kortStokkMagnus $Magnus -kortStokkMeg $Ahmad
-        Write-Host "Kortstokk:  $(kortstokkPrint($kortstokkJson))"
-        exit
-    }
-
+    return resultatTilHashtable -vinner "magnus" -kortStokkMagnus $magnus -kortStokkMeg $meg
 }
 
-BJGame
+$r = try {
+    switch ($urlKortstokk) {
+        { -not $_ } { playBlackJack }
+        Default { playBlackJack -encodedUrlKortstokk $urlKortstokk }
+    }
+}
+catch { 
+    $null
+}
+
+
+$httpResp = if (-not $r) {
+    [HttpResponseContext]@{
+        StatusCode = [HttpStatusCode]::OK
+        Body = @{error = 'something went wrong, invalid param?'}
+    }    
+}
+else {
+    [HttpResponseContext]@{
+        StatusCode = [HttpStatusCode]::OK
+        Body = ConvertTo-Json -InputObject $r
+    }        
+}
+
+# Associate values to output bindings by calling 'Push-OutputBinding'.
+Push-OutputBinding -Name Response -Value $httpResp
