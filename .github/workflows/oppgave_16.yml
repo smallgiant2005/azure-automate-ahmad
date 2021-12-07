@@ -1,0 +1,27 @@
+name: oppgave 16
+on:
+  [ push, workflow_dispatch ]
+
+jobs:
+  job1:
+    defaults:
+      run:
+        shell: pwsh
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        
+      - name: Login via Az module
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.NEWSECRETWORKSHOP }}
+          enable-AzPSSession: true 
+
+      - name: Run Blackjack script file
+        run: |
+          ./src/oppgave_10.ps1 -UrlKortstokk 'http://nav-deckofcards.herokuapp.com/shuffle'
+      
+      
+
+          
