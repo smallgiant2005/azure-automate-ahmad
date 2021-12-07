@@ -71,7 +71,7 @@ function playBlackjack {
             $kortStokkMeg
         )
         [ordered]@{
-            vinner = $vinner
+            AmazingWinner = $vinner
             magnus = [ordered]@{
                 poeng = $(sumPoengKortstokk -kortstokk $kortStokkMagnus)
                 kort  = $(kortStokkTilStreng -kortstokk $kortStokkMagnus)
