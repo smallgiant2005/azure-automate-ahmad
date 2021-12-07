@@ -1,0 +1,36 @@
+name: oppgave 17
+on:
+  [ push, workflow_dispatch ]
+
+jobs:
+  job1:
+    defaults:
+      run:
+        shell: pwsh
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        
+      - name: Login via Az module
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.NEWSECRETWORKSHOP }}
+          enable-AzPSSession: true 
+
+      - name: Install and cache PowerShell modules
+        uses: potatoqualitee/psmodulecache@v4
+        with:
+          modules-to-cache: Az.Storage, Az.Functions, Az.Websites, Az.Resources, Az.Accounts
+
+      - name: Deploy Function app
+        run: |
+          ./funcApp/deployWithAz.ps1 
+
+      - name: Run Blackjack script file
+        run: |
+          ./src/oppgave_10.ps1 -UrlKortstokk 'http://nav-deckofcards.herokuapp.com/shuffle'
+      
+      
+
+          
